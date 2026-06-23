@@ -37,22 +37,31 @@ PRODUCT_CATALOGUE = [
 ]
 
 
+def seeded_uuid(rng: random.Random) -> str:
+    """
+    Generate a UUID4 using a seeded Random instance.
+    uuid.uuid4() pulls from the system entropy pool and ignores
+    Python's random seed — this ensures deterministic output.
+    """
+    return str(uuid.UUID(int=rng.getrandbits(128), version=4))
+
+
 class CustomerGenerator:
     def __init__(self, config: SimulatorConfig):
         self.config = config
+        self.rng = random.Random(config.seed)
         self.faker_instances = {
             "AU": Faker("en_AU"),
             "US": Faker("en_US"),
             "UK": Faker("en_GB"),
         }
-        random.seed(config.seed)
         for faker in self.faker_instances.values():
             faker.seed_instance(config.seed)
 
     def generate(self) -> list[Customer]:
         customers = []
-        # Distribute customers across countries
         per_country = self.config.num_customers // len(self.config.countries)
+        used_emails: set[str] = set()  # global across all countries
 
         for country in self.config.countries:
             faker = self.faker_instances[country]
@@ -60,13 +69,19 @@ class CustomerGenerator:
 
             for _ in range(per_country):
                 registered_at = datetime(2023, 1, 1) + timedelta(
-                    days=random.randint(0, self.config.num_days)
+                    days=self.rng.randint(0, self.config.num_days)
                 )
+
+                email = faker.email()
+                while email in used_emails:
+                    email = faker.email()
+                used_emails.add(email)
+
                 customers.append(Customer(
-                    customer_id=str(uuid.uuid4()),
+                    customer_id=seeded_uuid(self.rng),
                     first_name=faker.first_name(),
                     last_name=faker.last_name(),
-                    email=faker.email(),
+                    email=email,
                     country=country,
                     currency=currency,
                     city=faker.city(),
@@ -79,7 +94,7 @@ class CustomerGenerator:
 class ProductGenerator:
     def __init__(self, config: SimulatorConfig):
         self.config = config
-        random.seed(config.seed)
+        self.rng = random.Random(config.seed)
 
     def generate(self) -> list[Product]:
         products = []
@@ -90,10 +105,10 @@ class ProductGenerator:
         for i in range(self.config.num_products):
             name, category = catalogue[i]
             products.append(Product(
-                product_id=str(uuid.uuid4()),
+                product_id=seeded_uuid(self.rng),
                 name=name,
                 category=category,
-                base_price_usd=round(random.uniform(5.0, 120.0), 2),
+                base_price_usd=round(self.rng.uniform(5.0, 120.0), 2),
             ))
 
         return products
@@ -102,7 +117,7 @@ class ProductGenerator:
 class OrderGenerator:
     def __init__(self, config: SimulatorConfig):
         self.config = config
-        random.seed(config.seed)
+        self.rng = random.Random(config.seed)
 
     def generate(
         self,
@@ -113,38 +128,36 @@ class OrderGenerator:
         start_date = datetime(2023, 1, 1)
 
         for customer in customers:
-            # Every customer places at least one order
             num_orders = 1
-            if random.random() < self.config.repeat_purchase_rate:
-                num_orders = random.randint(2, 6)
+            if self.rng.random() < self.config.repeat_purchase_rate:
+                num_orders = self.rng.randint(2, 6)
 
             for _ in range(num_orders):
                 placed_at = start_date + timedelta(
-                    days=random.randint(0, self.config.num_days)
+                    days=self.rng.randint(0, self.config.num_days)
                 )
-                # Order must be after customer registered
                 if placed_at < customer.registered_at:
                     placed_at = customer.registered_at + timedelta(
-                        days=random.randint(1, 30)
+                        days=self.rng.randint(1, 30)
                     )
 
-                num_items = random.randint(1, 5)
-                selected = random.choices(products, k=num_items)
+                num_items = self.rng.randint(1, 5)
+                selected = self.rng.choices(products, k=num_items)
                 rate = EXCHANGE_RATES[customer.currency]
                 order_total = round(
                     sum(p.base_price_usd * rate for p in selected), 2
                 )
 
-                is_cancelled = random.random() < self.config.cancellation_rate
+                is_cancelled = self.rng.random() < self.config.cancellation_rate
                 status = "cancelled" if is_cancelled else "delivered"
                 delivered_at = None
                 if not is_cancelled:
                     delivered_at = placed_at + timedelta(
-                        days=random.randint(2, 14)
+                        days=self.rng.randint(2, 14)
                     )
 
                 orders.append(Order(
-                    order_id=str(uuid.uuid4()),
+                    order_id=seeded_uuid(self.rng),
                     customer_id=customer.customer_id,
                     country=customer.country,
                     currency=customer.currency,
@@ -161,24 +174,23 @@ class OrderGenerator:
 class PaymentGenerator:
     def __init__(self, config: SimulatorConfig):
         self.config = config
-        random.seed(config.seed)
+        self.rng = random.Random(config.seed)
 
     def generate(self, orders: list[Order]) -> list[Payment]:
         payments = []
         methods = ["credit_card", "debit_card", "paypal"]
 
         for order in orders:
-            # Cancelled orders do not generate payments
             if order.status == "cancelled":
                 continue
 
             payments.append(Payment(
-                payment_id=str(uuid.uuid4()),
+                payment_id=seeded_uuid(self.rng),
                 order_id=order.order_id,
                 customer_id=order.customer_id,
                 amount=order.order_total,
                 currency=order.currency,
-                payment_method=random.choice(methods),
+                payment_method=self.rng.choice(methods),
                 paid_at=order.placed_at,
                 status="completed",
             ))
