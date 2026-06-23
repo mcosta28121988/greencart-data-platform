@@ -1,4 +1,5 @@
 import uuid
+import math
 import random
 from datetime import datetime, timedelta
 from faker import Faker
@@ -46,6 +47,43 @@ def seeded_uuid(rng: random.Random) -> str:
     return str(uuid.UUID(int=rng.getrandbits(128), version=4))
 
 
+def _day_weight(date: datetime) -> float:
+    """
+    Returns a relative probability weight for a given date.
+    Higher weight means more likely to generate an order.
+
+    Models three real e-commerce patterns:
+    - Seasonal ramp: peaks in late December, dips in early year
+    - Black Friday spike: sharp peak around day 330 (late November)
+    - Weekend uplift: Saturday and Sunday get 15% more volume
+    """
+    day_of_year = date.timetuple().tm_yday
+
+    seasonal = 1.0 + 0.4 * math.sin(
+        math.pi * (day_of_year - 80) / 365
+    )
+
+    black_friday_distance = abs(day_of_year - 330)
+    black_friday = 1.0 + 3.0 * math.exp(
+        -0.5 * (black_friday_distance ** 2) / 25
+    )
+
+    weekend = 1.15 if date.weekday() >= 5 else 1.0
+
+    return seasonal * black_friday * weekend
+
+
+def _sample_date(rng: random.Random, start: datetime, num_days: int) -> datetime:
+    """
+    Sample a date from the simulation window using weighted
+    probability — days with higher weights are more likely to
+    be chosen. This is what produces the seasonal pattern.
+    """
+    dates = [start + timedelta(days=i) for i in range(num_days)]
+    weights = [_day_weight(d) for d in dates]
+    return rng.choices(dates, weights=weights, k=1)[0]
+
+
 class CustomerGenerator:
     def __init__(self, config: SimulatorConfig):
         self.config = config
@@ -61,15 +99,17 @@ class CustomerGenerator:
     def generate(self) -> list[Customer]:
         customers = []
         per_country = self.config.num_customers // len(self.config.countries)
-        used_emails: set[str] = set()  # global across all countries
+        used_emails: set[str] = set()
 
         for country in self.config.countries:
             faker = self.faker_instances[country]
             currency = CURRENCY_MAP[country]
 
             for _ in range(per_country):
-                registered_at = datetime(2023, 1, 1) + timedelta(
-                    days=self.rng.randint(0, self.config.num_days)
+                registered_at = _sample_date(
+                    self.rng,
+                    datetime(2023, 1, 1),
+                    self.config.num_days,
                 )
 
                 email = faker.email()
@@ -133,9 +173,10 @@ class OrderGenerator:
                 num_orders = self.rng.randint(2, 6)
 
             for _ in range(num_orders):
-                placed_at = start_date + timedelta(
-                    days=self.rng.randint(0, self.config.num_days)
+                placed_at = _sample_date(
+                    self.rng, start_date, self.config.num_days
                 )
+
                 if placed_at < customer.registered_at:
                     placed_at = customer.registered_at + timedelta(
                         days=self.rng.randint(1, 30)
