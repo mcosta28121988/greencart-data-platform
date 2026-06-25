@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from dataclasses import asdict
-from .models import Customer, Product, Order, Payment
+from .models import Customer, Product, Order, OrderLine, Payment
 
 
 class ParquetExporter:
@@ -18,17 +18,20 @@ class ParquetExporter:
         customers: list[Customer],
         products: list[Product],
         orders: list[Order],
+        order_lines: list[OrderLine],
         payments: list[Payment],
     ) -> None:
         self._write(customers, "customers")
         self._write(products, "products")
         self._write(orders, "orders")
+        self._write(order_lines, "order_lines")
         self._write(payments, "payments")
         print(f"Exported to {self.output_dir}/")
-        print(f"  customers : {len(customers):,} rows")
-        print(f"  products  : {len(products):,} rows")
-        print(f"  orders    : {len(orders):,} rows")
-        print(f"  payments  : {len(payments):,} rows")
+        print(f"  customers   : {len(customers):,} rows")
+        print(f"  products    : {len(products):,} rows")
+        print(f"  orders      : {len(orders):,} rows")
+        print(f"  order_lines : {len(order_lines):,} rows")
+        print(f"  payments    : {len(payments):,} rows")
 
     def _write(self, records: list, name: str) -> None:
         df = pd.DataFrame([asdict(r) for r in records])

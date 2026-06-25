@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from faker import Faker
 
 from .config import SimulatorConfig, CURRENCY_MAP
-from .models import Customer, Product, Order, Payment
+from .models import Customer, Product, Order, OrderLine, Payment
 
 
 EXCHANGE_RATES = {
@@ -39,46 +39,19 @@ PRODUCT_CATALOGUE = [
 
 
 def seeded_uuid(rng: random.Random) -> str:
-    """
-    Generate a UUID4 using a seeded Random instance.
-    uuid.uuid4() pulls from the system entropy pool and ignores
-    Python's random seed — this ensures deterministic output.
-    """
     return str(uuid.UUID(int=rng.getrandbits(128), version=4))
 
 
 def _day_weight(date: datetime) -> float:
-    """
-    Returns a relative probability weight for a given date.
-    Higher weight means more likely to generate an order.
-
-    Models three real e-commerce patterns:
-    - Seasonal ramp: peaks in late December, dips in early year
-    - Black Friday spike: sharp peak around day 330 (late November)
-    - Weekend uplift: Saturday and Sunday get 15% more volume
-    """
     day_of_year = date.timetuple().tm_yday
-
-    seasonal = 1.0 + 0.4 * math.sin(
-        math.pi * (day_of_year - 80) / 365
-    )
-
+    seasonal = 1.0 + 0.4 * math.sin(math.pi * (day_of_year - 80) / 365)
     black_friday_distance = abs(day_of_year - 330)
-    black_friday = 1.0 + 3.0 * math.exp(
-        -0.5 * (black_friday_distance ** 2) / 25
-    )
-
+    black_friday = 1.0 + 3.0 * math.exp(-0.5 * (black_friday_distance ** 2) / 25)
     weekend = 1.15 if date.weekday() >= 5 else 1.0
-
     return seasonal * black_friday * weekend
 
 
 def _sample_date(rng: random.Random, start: datetime, num_days: int) -> datetime:
-    """
-    Sample a date from the simulation window using weighted
-    probability — days with higher weights are more likely to
-    be chosen. This is what produces the seasonal pattern.
-    """
     dates = [start + timedelta(days=i) for i in range(num_days)]
     weights = [_day_weight(d) for d in dates]
     return rng.choices(dates, weights=weights, k=1)[0]
@@ -107,11 +80,8 @@ class CustomerGenerator:
 
             for _ in range(per_country):
                 registered_at = _sample_date(
-                    self.rng,
-                    datetime(2023, 1, 1),
-                    self.config.num_days,
+                    self.rng, datetime(2023, 1, 1), self.config.num_days
                 )
-
                 email = faker.email()
                 while email in used_emails:
                     email = faker.email()
@@ -141,7 +111,6 @@ class ProductGenerator:
         catalogue = PRODUCT_CATALOGUE * (
             self.config.num_products // len(PRODUCT_CATALOGUE) + 1
         )
-
         for i in range(self.config.num_products):
             name, category = catalogue[i]
             products.append(Product(
@@ -150,7 +119,6 @@ class ProductGenerator:
                 category=category,
                 base_price_usd=round(self.rng.uniform(5.0, 120.0), 2),
             ))
-
         return products
 
 
@@ -163,8 +131,9 @@ class OrderGenerator:
         self,
         customers: list[Customer],
         products: list[Product],
-    ) -> list[Order]:
+    ) -> tuple[list[Order], list[OrderLine]]:
         orders = []
+        order_lines = []
         start_date = datetime(2023, 1, 1)
 
         for customer in customers:
@@ -173,43 +142,51 @@ class OrderGenerator:
                 num_orders = self.rng.randint(2, 6)
 
             for _ in range(num_orders):
-                placed_at = _sample_date(
-                    self.rng, start_date, self.config.num_days
-                )
+                placed_at = _sample_date(self.rng, start_date, self.config.num_days)
 
                 if placed_at < customer.registered_at:
                     placed_at = customer.registered_at + timedelta(
                         days=self.rng.randint(1, 30)
                     )
 
-                num_items = self.rng.randint(1, 5)
-                selected = self.rng.choices(products, k=num_items)
-                rate = EXCHANGE_RATES[customer.currency]
-                order_total = round(
-                    sum(p.base_price_usd * rate for p in selected), 2
-                )
-
                 is_cancelled = self.rng.random() < self.config.cancellation_rate
                 status = "cancelled" if is_cancelled else "delivered"
                 delivered_at = None
                 if not is_cancelled:
-                    delivered_at = placed_at + timedelta(
-                        days=self.rng.randint(2, 14)
-                    )
+                    delivered_at = placed_at + timedelta(days=self.rng.randint(2, 14))
+
+                order_id = seeded_uuid(self.rng)
+                rate = EXCHANGE_RATES[customer.currency]
+                num_lines = self.rng.randint(1, 5)
+                selected_products = self.rng.choices(products, k=num_lines)
+
+                for product in selected_products:
+                    quantity = self.rng.randint(1, 3)
+                    unit_price = round(product.base_price_usd * rate, 2)
+                    line_total = round(unit_price * quantity, 2)
+
+                    order_lines.append(OrderLine(
+                        order_line_id=seeded_uuid(self.rng),
+                        order_id=order_id,
+                        product_id=product.product_id,
+                        product_name=product.name,
+                        category=product.category,
+                        quantity=quantity,
+                        unit_price=unit_price,
+                        line_total=line_total,
+                    ))
 
                 orders.append(Order(
-                    order_id=seeded_uuid(self.rng),
+                    order_id=order_id,
                     customer_id=customer.customer_id,
                     country=customer.country,
                     currency=customer.currency,
                     status=status,
-                    order_total=order_total,
-                    num_items=num_items,
                     placed_at=placed_at,
                     delivered_at=delivered_at,
                 ))
 
-        return orders
+        return orders, order_lines
 
 
 class PaymentGenerator:
@@ -217,9 +194,19 @@ class PaymentGenerator:
         self.config = config
         self.rng = random.Random(config.seed)
 
-    def generate(self, orders: list[Order]) -> list[Payment]:
+    def generate(
+        self,
+        orders: list[Order],
+        order_lines: list[OrderLine],
+    ) -> list[Payment]:
         payments = []
         methods = ["credit_card", "debit_card", "paypal"]
+
+        order_totals: dict[str, float] = {}
+        for line in order_lines:
+            order_totals[line.order_id] = round(
+                order_totals.get(line.order_id, 0.0) + line.line_total, 2
+            )
 
         for order in orders:
             if order.status == "cancelled":
@@ -229,7 +216,7 @@ class PaymentGenerator:
                 payment_id=seeded_uuid(self.rng),
                 order_id=order.order_id,
                 customer_id=order.customer_id,
-                amount=order.order_total,
+                amount=order_totals.get(order.order_id, 0.0),
                 currency=order.currency,
                 payment_method=self.rng.choice(methods),
                 paid_at=order.placed_at,

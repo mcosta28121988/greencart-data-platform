@@ -24,13 +24,23 @@ def customers(config):
 
 
 @pytest.fixture
-def orders(config, customers, products):
+def orders_and_lines(config, customers, products):
     return OrderGenerator(config).generate(customers, products)
 
 
 @pytest.fixture
-def payments(config, orders):
-    return PaymentGenerator(config).generate(orders)
+def orders(orders_and_lines):
+    return orders_and_lines[0]
+
+
+@pytest.fixture
+def order_lines(orders_and_lines):
+    return orders_and_lines[1]
+
+
+@pytest.fixture
+def payments(config, orders, order_lines):
+    return PaymentGenerator(config).generate(orders, order_lines)
 
 
 class TestCustomerGenerator:
@@ -86,16 +96,10 @@ class TestOrderGenerator:
         assert all_customer_ids == customer_ids_with_orders
 
     def test_valid_statuses(self, orders):
-        valid = {"placed", "delivered", "cancelled"}
+        valid = {"delivered", "cancelled"}
         assert all(o.status in valid for o in orders)
 
-    def test_order_total_is_positive(self, orders):
-        assert all(o.order_total > 0 for o in orders)
-
-    def test_num_items_is_positive(self, orders):
-        assert all(o.num_items > 0 for o in orders)
-
-    def test_no_duplicate_ids(self, orders):
+    def test_no_duplicate_order_ids(self, orders):
         ids = [o.order_id for o in orders]
         assert len(ids) == len(set(ids))
 
@@ -120,14 +124,50 @@ class TestOrderGenerator:
             assert o.placed_at >= reg_map[o.customer_id]
 
 
+class TestOrderLineGenerator:
+    def test_every_order_has_at_least_one_line(self, orders, order_lines):
+        order_ids_with_lines = {ol.order_id for ol in order_lines}
+        all_order_ids = {o.order_id for o in orders}
+        assert all_order_ids == order_ids_with_lines
+
+    def test_no_duplicate_line_ids(self, order_lines):
+        ids = [ol.order_line_id for ol in order_lines]
+        assert len(ids) == len(set(ids))
+
+    def test_line_total_equals_quantity_times_price(self, order_lines):
+        for ol in order_lines:
+            expected = round(ol.quantity * ol.unit_price, 2)
+            assert ol.line_total == expected
+
+    def test_unit_price_is_positive(self, order_lines):
+        assert all(ol.unit_price > 0 for ol in order_lines)
+
+    def test_quantity_within_range(self, order_lines):
+        assert all(1 <= ol.quantity <= 3 for ol in order_lines)
+
+    def test_all_lines_reference_valid_orders(self, orders, order_lines):
+        order_ids = {o.order_id for o in orders}
+        for ol in order_lines:
+            assert ol.order_id in order_ids
+
+    def test_all_lines_reference_valid_products(self, products, order_lines):
+        product_ids = {p.product_id for p in products}
+        for ol in order_lines:
+            assert ol.product_id in product_ids
+
+
 class TestPaymentGenerator:
     def test_cancelled_orders_have_no_payment(self, orders, payments):
         cancelled_ids = {o.order_id for o in orders if o.status == "cancelled"}
         payment_order_ids = {p.order_id for p in payments}
         assert cancelled_ids.isdisjoint(payment_order_ids)
 
-    def test_payment_amount_matches_order(self, orders, payments):
-        order_totals = {o.order_id: o.order_total for o in orders}
+    def test_payment_amount_matches_order_lines_total(self, order_lines, payments):
+        order_totals: dict[str, float] = {}
+        for ol in order_lines:
+            order_totals[ol.order_id] = round(
+                order_totals.get(ol.order_id, 0.0) + ol.line_total, 2
+            )
         for p in payments:
             assert p.amount == order_totals[p.order_id]
 
