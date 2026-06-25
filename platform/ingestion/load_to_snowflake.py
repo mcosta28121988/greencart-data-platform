@@ -27,6 +27,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 TABLES = [
     "customers",
     "products",
+    "order_lines",
     "orders",
     "payments",
 ]
