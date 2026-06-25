@@ -1,0 +1,150 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: >
+      Cleaned and renamed customers from the raw source.
+      One row per customer. Emails lowercased for consistency.
+    columns:
+      - name: customer_id
+        description: Surrogate UUID from the simulator
+        tests:
+          - unique
+          - not_null
+      - name: email
+        description: Customer email, lowercased
+        tests:
+          - unique
+          - not_null
+      - name: country
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['AU', 'US', 'UK']
+      - name: currency
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['AUD', 'USD', 'GBP']
+      - name: registered_at
+        tests:
+          - not_null
+
+  - name: stg_products
+    description: >
+      Cleaned and renamed products from the raw source.
+      One row per product.
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null
+      - name: product_name
+        tests:
+          - not_null
+      - name: category
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Kitchen', 'Personal Care', 'Accessories',
+                         'Electronics', 'Stationery', 'Home',
+                         'Fitness', 'Clothing']
+      - name: base_price_usd
+        tests:
+          - not_null
+
+  - name: stg_orders
+    description: >
+      Cleaned and renamed order headers from the raw source.
+      One row per order. Does not contain financial totals —
+      those are derived from stg_order_lines.
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['delivered', 'cancelled']
+      - name: placed_at
+        tests:
+          - not_null
+
+  - name: stg_order_lines
+    description: >
+      Cleaned and renamed order lines from the raw source.
+      One row per product per order. This is the grain that
+      drives all revenue and volume metrics.
+    columns:
+      - name: order_line_id
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: product_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+      - name: quantity
+        tests:
+          - not_null
+      - name: unit_price
+        tests:
+          - not_null
+      - name: line_total
+        tests:
+          - not_null
+
+  - name: stg_payments
+    description: >
+      Cleaned and renamed payments from the raw source.
+      One row per payment. Only delivered orders have payments.
+    columns:
+      - name: payment_id
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: amount
+        tests:
+          - not_null
+      - name: payment_method
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['credit_card', 'debit_card', 'paypal']
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['completed', 'refunded']

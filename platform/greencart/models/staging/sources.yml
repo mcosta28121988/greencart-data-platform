@@ -1,0 +1,41 @@
+version: 2
+
+sources:
+  - name: greencart_raw
+    database: RAW
+    schema: GREENCART
+    description: >
+      Raw tables loaded from the GreenCart Business Simulator.
+      These tables are written by the ingestion pipeline and should
+      never be modified by the transformation layer.
+
+    tables:
+      - name: CUSTOMERS
+        description: One row per registered customer
+        config:
+          loaded_at_field: REGISTERED_AT
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
+
+      - name: PRODUCTS
+        description: One row per product in the sustainable catalogue
+
+      - name: ORDERS
+        description: One row per order header
+        config:
+          loaded_at_field: PLACED_AT
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
+
+      - name: ORDER_LINES
+        description: One row per product line within an order
+
+      - name: PAYMENTS
+        description: One row per payment for a delivered order
+        config:
+          loaded_at_field: PAID_AT
+          freshness:
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
