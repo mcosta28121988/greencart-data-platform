@@ -1,18 +1,18 @@
-with source as (
-    select * from {{ source('greencart_raw', 'PAYMENTS') }}
+WITH source AS (
+    SELECT * FROM {{ source('greencart_raw', 'PAYMENTS') }}
 ),
 
-renamed as (
-    select
-        PAYMENT_ID                              as payment_id,
-        ORDER_ID                                as order_id,
-        CUSTOMER_ID                             as customer_id,
-        AMOUNT::float                           as amount,
-        CURRENCY                                as currency,
-        LOWER(PAYMENT_METHOD)                   as payment_method,
-        PAID_AT::timestamp_ntz                  as paid_at,
-        LOWER(STATUS)                           as status
-    from source
+renamed AS (
+    SELECT
+        payment_id,
+        order_id,
+        customer_id,
+        amount::float AS amount,
+        currency,
+        paid_at::timestamp_ntz AS paid_at,
+        LOWER(payment_method) AS payment_method,
+        LOWER(status) AS status
+    FROM source
 )
 
-select * from renamed
+SELECT * FROM renamed

@@ -1,13 +1,13 @@
-with customers as (
-    select * from {{ ref('stg_customers') }}
+WITH customers AS (
+    SELECT * FROM {{ ref('stg_customers') }}
 ),
 
-summary as (
-    select * from {{ ref('int_customer_orders_summary') }}
+summary AS (
+    SELECT * FROM {{ ref('int_customer_orders_summary') }}
 ),
 
-final as (
-    select
+final AS (
+    SELECT
         c.customer_id,
         c.first_name,
         c.last_name,
@@ -19,28 +19,29 @@ final as (
         c.is_active,
 
         -- Order behaviour
-        coalesce(s.total_orders, 0) as total_orders,
-        coalesce(s.delivered_orders, 0) as delivered_orders,
-        coalesce(s.cancelled_orders, 0) as cancelled_orders,
-        coalesce(s.total_revenue, 0) as total_revenue,
         s.avg_order_value,
         s.first_order_at,
         s.last_order_at,
-        coalesce(s.is_repeat_buyer, false) as is_repeat_buyer,
         s.days_between_first_and_last_order,
+        COALESCE(s.total_orders, 0) AS total_orders,
+        COALESCE(s.delivered_orders, 0) AS delivered_orders,
+        COALESCE(s.cancelled_orders, 0) AS cancelled_orders,
+        COALESCE(s.total_revenue, 0) AS total_revenue,
+        COALESCE(s.is_repeat_buyer, FALSE) AS is_repeat_buyer,
 
         -- Customer segment
-        case
-            when coalesce(s.total_orders, 0) = 0 then 'no_orders'
-            when s.is_repeat_buyer = true
-             and coalesce(s.total_revenue, 0) >= 500 then 'high_value'
-            when s.is_repeat_buyer = true then 'repeat'
-            else 'one_time'
-        end as customer_segment
+        CASE
+            WHEN COALESCE(s.total_orders, 0) = 0 THEN 'no_orders'
+            WHEN
+                s.is_repeat_buyer = TRUE
+                AND COALESCE(s.total_revenue, 0) >= 500 THEN 'high_value'
+            WHEN s.is_repeat_buyer = TRUE THEN 'repeat'
+            ELSE 'one_time'
+        END AS customer_segment
 
-    from customers c
-    left join summary s
-        on c.customer_id = s.customer_id
+    FROM customers AS c
+    LEFT JOIN summary AS s
+        ON c.customer_id = s.customer_id
 )
 
-select * from final
+SELECT * FROM final

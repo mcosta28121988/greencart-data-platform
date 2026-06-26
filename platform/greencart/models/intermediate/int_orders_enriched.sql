@@ -1,27 +1,27 @@
-with orders as (
-    select * from {{ ref('stg_orders') }}
+WITH orders AS (
+    SELECT * FROM {{ ref('stg_orders') }}
 ),
 
-order_lines as (
-    select * from {{ ref('stg_order_lines') }}
+order_lines AS (
+    SELECT * FROM {{ ref('stg_order_lines') }}
 ),
 
-customers as (
-    select * from {{ ref('stg_customers') }}
+customers AS (
+    SELECT * FROM {{ ref('stg_customers') }}
 ),
 
-order_totals as (
-    select
+order_totals AS (
+    SELECT
         order_id,
-        sum(line_total) as order_total,
-        sum(quantity) as total_items,
-        count(order_line_id) as total_lines
-    from order_lines
-    group by all
+        SUM(line_total) AS order_total,
+        SUM(quantity) AS total_items,
+        COUNT(order_line_id) AS total_lines
+    FROM order_lines
+    GROUP BY ALL
 ),
 
-enriched as (
-    select
+enriched AS (
+    SELECT
         o.order_id,
         o.customer_id,
         o.country,
@@ -34,7 +34,7 @@ enriched as (
         c.first_name,
         c.last_name,
         c.city,
-        c.registered_at as customer_registered_at,
+        c.registered_at AS customer_registered_at,
 
         -- Derived order metrics
         ot.order_total,
@@ -42,19 +42,19 @@ enriched as (
         ot.total_lines,
 
         -- Delivery metrics
-        case
-            when o.delivered_at is not null
-            then datediff('day', o.placed_at, o.delivered_at)
-        end as days_to_deliver,
+        CASE
+            WHEN o.delivered_at IS NOT NULL
+                THEN DATEDIFF('day', o.placed_at, o.delivered_at)
+        END AS days_to_deliver,
 
         -- Customer tenure at time of order
-        datediff('day', c.registered_at, o.placed_at) as days_since_registration
+        DATEDIFF('day', c.registered_at, o.placed_at) AS days_since_registration
 
-    from orders o
-    left join customers c
-        on o.customer_id = c.customer_id
-    left join order_totals ot
-        on o.order_id = ot.order_id
+    FROM orders AS o
+    LEFT JOIN customers AS c
+        ON o.customer_id = c.customer_id
+    LEFT JOIN order_totals AS ot
+        ON o.order_id = ot.order_id
 )
 
-select * from enriched
+SELECT * FROM enriched

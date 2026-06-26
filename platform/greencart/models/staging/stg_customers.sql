@@ -1,19 +1,19 @@
-with source as (
-    select * from {{ source('greencart_raw', 'CUSTOMERS') }}
+WITH source AS (
+    SELECT * FROM {{ source('greencart_raw', 'CUSTOMERS') }}
 ),
 
-renamed as (
-    select
-        CUSTOMER_ID as customer_id,
-        FIRST_NAME as first_name,
-        LAST_NAME as last_name,
-        LOWER(EMAIL) as email,
-        COUNTRY as country,
-        CURRENCY as currency,
-        CITY as city,
-        REGISTERED_AT::timestamp_ntz as registered_at,
-        IS_ACTIVE::boolean as is_active
-    from source
+renamed AS (
+    SELECT
+        customer_id,
+        first_name,
+        last_name,
+        country,
+        currency,
+        city,
+        registered_at::timestamp_ntz AS registered_at,
+        is_active::boolean AS is_active,
+        LOWER(email) AS email
+    FROM source
 )
 
-select * from renamed
+SELECT * FROM renamed

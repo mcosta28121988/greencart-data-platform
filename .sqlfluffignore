@@ -1,0 +1,3 @@
+platform/greencart/target/
+platform/greencart/dbt_packages/
+simulator/

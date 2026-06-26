@@ -1,18 +1,18 @@
-with source as (
-    select * from {{ source('greencart_raw', 'ORDER_LINES') }}
+WITH source AS (
+    SELECT * FROM {{ source('greencart_raw', 'ORDER_LINES') }}
 ),
 
-renamed as (
-    select
-        ORDER_LINE_ID as order_line_id,
-        ORDER_ID as order_id,
-        PRODUCT_ID as product_id,
-        PRODUCT_NAME as product_name,
-        CATEGORY as category,
-        QUANTITY::integer as quantity,
-        UNIT_PRICE::float as unit_price,
-        LINE_TOTAL::float as line_total
-    from source
+renamed AS (
+    SELECT
+        order_line_id,
+        order_id,
+        product_id,
+        product_name,
+        category,
+        quantity::integer AS quantity,
+        unit_price::float AS unit_price,
+        line_total::float AS line_total
+    FROM source
 )
 
-select * from renamed
+SELECT * FROM renamed

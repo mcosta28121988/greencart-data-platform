@@ -1,27 +1,27 @@
-with orders as (
-    select * from {{ ref('int_orders_enriched') }}
+WITH orders AS (
+    SELECT * FROM {{ ref('int_orders_enriched') }}
 ),
 
-order_lines as (
-    select * from {{ ref('stg_order_lines') }}
+order_lines AS (
+    SELECT * FROM {{ ref('stg_order_lines') }}
 ),
 
 -- Top category per order by revenue
-top_category as (
-    select
+top_category AS (
+    SELECT
         order_id,
         category,
-        sum(line_total) as category_revenue,
-        row_number() over (
-            partition by order_id
-            order by sum(line_total) desc
-        ) as rn
-    from order_lines
-    group by order_id, category
+        SUM(line_total) AS category_revenue,
+        ROW_NUMBER() OVER (
+            PARTITION BY order_id
+            ORDER BY SUM(line_total) DESC
+        ) AS rn
+    FROM order_lines
+    GROUP BY order_id, category
 ),
 
-final as (
-    select
+final AS (
+    SELECT
         o.order_id,
         o.customer_id,
         o.country,
@@ -36,20 +36,21 @@ final as (
         o.total_lines,
 
         -- Date dimensions
-        date_trunc('day', o.placed_at) as placed_date,
-        date_trunc('week', o.placed_at) as placed_week,
-        date_trunc('month', o.placed_at) as placed_month,
-        dayofweek(o.placed_at) as placed_day_of_week,
-        month(o.placed_at) as placed_month_number,
-        year(o.placed_at) as placed_year,
+        tc.category AS primary_category,
+        DATE_TRUNC('day', o.placed_at) AS placed_date,
+        DATE_TRUNC('week', o.placed_at) AS placed_week,
+        DATE_TRUNC('month', o.placed_at) AS placed_month,
+        DAYOFWEEK(o.placed_at) AS placed_day_of_week,
+        MONTH(o.placed_at) AS placed_month_number,
 
         -- Top category for this order
-        tc.category as primary_category
+        YEAR(o.placed_at) AS placed_year
 
-    from orders o
-    left join top_category tc
-        on o.order_id = tc.order_id
-        and tc.rn = 1
+    FROM orders AS o
+    LEFT JOIN top_category AS tc
+        ON
+            o.order_id = tc.order_id
+            AND tc.rn = 1
 )
 
-select * from final
+SELECT * FROM final

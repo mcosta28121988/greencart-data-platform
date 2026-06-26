@@ -1,15 +1,15 @@
-with source as (
-    select * from {{ source('greencart_raw', 'PRODUCTS') }}
+WITH source AS (
+    SELECT * FROM {{ source('greencart_raw', 'PRODUCTS') }}
 ),
 
-renamed as (
-    select
-        PRODUCT_ID                              as product_id,
-        NAME                                    as product_name,
-        CATEGORY                                as category,
-        BASE_PRICE_USD::float                   as base_price_usd,
-        IS_ACTIVE::boolean                      as is_active
-    from source
+renamed AS (
+    SELECT
+        product_id,
+        name AS product_name,
+        category,
+        base_price_usd::float AS base_price_usd,
+        is_active::boolean AS is_active
+    FROM source
 )
 
-select * from renamed
+SELECT * FROM renamed
