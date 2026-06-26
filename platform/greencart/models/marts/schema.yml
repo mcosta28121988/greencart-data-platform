@@ -1,0 +1,60 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: >
+      One row per order. The central fact table for order analytics.
+      Includes date dimensions, delivery metrics and the primary
+      product category for each order.
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['delivered', 'cancelled']
+      - name: order_total
+        tests:
+          - not_null
+      - name: placed_at
+        tests:
+          - not_null
+
+  - name: dim_customers
+    description: >
+      One row per customer. Combines customer profile with
+      aggregated order behaviour. Used for segmentation and
+      retention analysis.
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_segment
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['no_orders', 'one_time', 'repeat', 'high_value']
+
+  - name: mart_sales_daily
+    description: >
+      Pre-aggregated daily sales metrics by country and category.
+      Delivered orders only. Powers the sales overview dashboard.
+    columns:
+      - name: date
+        tests:
+          - not_null
+      - name: country
+        tests:
+          - not_null
+      - name: total_revenue
+        tests:
+          - not_null

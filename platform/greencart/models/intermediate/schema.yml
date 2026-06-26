@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: int_orders_enriched
+    description: >
+      Orders joined with customers and order line totals.
+      One row per order. This is the primary intermediate model
+      that mart models build on top of.
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: order_total
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['delivered', 'cancelled']
+
+  - name: int_customer_orders_summary
+    description: >
+      One row per customer with aggregated order metrics.
+      Used to build the customer dimension and retention analysis.
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+      - name: total_orders
+        tests:
+          - not_null
+      - name: total_revenue
+        tests:
+          - not_null
